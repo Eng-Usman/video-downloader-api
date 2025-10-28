@@ -1,0 +1,11 @@
+# Netscape HTTP Cookie File
+# https://curl.haxx.se/rfc/cookie_spec.html
+# This is a generated file! Do not edit.
+
+.tiktok.com	TRUE	/	TRUE	0	tt_csrf_token	MJO5Jf9Y-Ipz04A70JvuwMWzAp4SEk9trSjw
+.tiktok.com	TRUE	/	TRUE	1777229027	tt_chain_token	xFYyCFPRkDM3QmPzul682g==
+.www.tiktok.com	TRUE	/	TRUE	1787597028	tiktok_webapp_theme_source	auto
+.www.tiktok.com	TRUE	/	TRUE	1787597028	tiktok_webapp_theme	dark
+.tiktok.com	TRUE	/	TRUE	1793213029	ttwid	1%7Cj-inDtOn3qngsChGrPqNo_FM39lGj2o6d7Iqu3Uxs2w%7C1761677028%7Cba9f779a47b8f8ce8acdb754f0d7d684b096a49b9b072e7d38252fcd439f44fb
+.tiktok.com	TRUE	/	TRUE	1762541036	msToken	imSn030iBGRcm4gRswY9VGfiSvYYKG5HYCPCU6kT88-As9U0MeMA1OappcS9dCwDG2WbBTQDMSDlKetN8DtQrOds52uG9azuB1bDSyv9xLDK7HrLXSk2CRzETyjfcw==
+www.tiktok.com	FALSE	/	FALSE	1769453036	msToken	3OZRRKD4Nrq5E7P00yTzG3MOWOXcz88RSAh6-3OCuayUtYg3KbZcOR2_P_FlCYslx-q3qEL25EMGlaamXMbfI-rG0oBsnX24ZaB-OS_otcqbrznn_r7TiEZxnEmPzg==
