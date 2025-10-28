@@ -1,5 +1,5 @@
+flask
 yt-dlp
 ffmpeg-python
 imageio[ffmpeg]
-flask
 gunicorn
