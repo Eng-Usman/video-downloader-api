@@ -1,0 +1,15 @@
+{
+  "download_root": "ydl_downloads",
+  "max_file_age_hours": 24,
+  "cleanup_interval_hours": 6,
+  "enable_cookies": true,
+  "allowed_domains": [
+    "youtube.com",
+    "instagram.com",
+    "twitter.com",
+    "tiktok.com",
+    "facebook.com"
+  ],
+  "rate_limit_requests": 100,
+  "rate_limit_period": 3600
+}

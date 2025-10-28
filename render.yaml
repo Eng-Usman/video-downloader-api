@@ -2,7 +2,16 @@ services:
   - type: web
     name: video-downloader-api
     env: python
+    plan: starter
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
-    plan: starter
-    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: PYTHON_VERSION
+        value: 3.11.0
+    disk:
+      name: downloads
+      mountPath: /opt/render/project/src/ydl_downloads
+      sizeGB: 1
+autoDeploy: true

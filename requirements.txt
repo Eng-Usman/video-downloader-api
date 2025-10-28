@@ -5,3 +5,5 @@ ffmpeg-python
 imageio[ffmpeg]
 pydantic
 python-multipart
+aiofiles
+python-dotenv
