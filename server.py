@@ -1,211 +1,237 @@
 import os
+import logging
 import tempfile
-import glob
-import shutil
 import subprocess
-import json
-from typing import Optional
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Query
-from fastapi.responses import FileResponse
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, FileResponse
 from yt_dlp import YoutubeDL
-from pydantic import BaseModel
 
-# ---------------- FASTAPI SETUP ---------------- #
-app = FastAPI(
-    title="Global Video & Audio Downloader API",
-    description="FastAPI backend supporting YouTube, Instagram, Facebook, TikTok with cookie-based authentication",
-    version="3.1.0",
-)
+# Initialize FastAPI app
+app = FastAPI(title="Universal Video Downloader API")
 
-# Allow cross-platform access (for Flutter apps)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("server")
 
-# ---------------- DIRECTORIES ---------------- #
-DOWNLOAD_ROOT = os.path.abspath("ydl_downloads")
-COOKIE_DIR = os.path.abspath("cookies")
-os.makedirs(DOWNLOAD_ROOT, exist_ok=True)
-os.makedirs(COOKIE_DIR, exist_ok=True)
+# Directory for cookies
+COOKIES_DIR = "cookies"
+os.makedirs(COOKIES_DIR, exist_ok=True)
 
-# ---------------- COOKIE MAPPING ---------------- #
-COOKIES_MAP = {
-    "youtube.com": os.path.join(COOKIE_DIR, "youtube.txt"),
-    "youtu.be": os.path.join(COOKIE_DIR, "youtube.txt"),
-    "facebook.com": os.path.join(COOKIE_DIR, "facebook.txt"),
-    "fb.watch": os.path.join(COOKIE_DIR, "facebook.txt"),
-    "instagram.com": os.path.join(COOKIE_DIR, "instagram.txt"),
-    "tiktok.com": os.path.join(COOKIE_DIR, "tiktok.txt"),
-}
+# Directory for temporary downloads
+DOWNLOAD_DIR = "downloads"
+os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-def get_cookie_file(url: str) -> Optional[str]:
-    """Return correct cookie file path for given domain"""
-    for key, path in COOKIES_MAP.items():
-        if key in url and os.path.exists(path):
-            return path
+
+# --- Helper: detect correct cookie file ---
+def get_cookie_file(url: str) -> str | None:
+    mapping = {
+        "youtube.com": "youtube.txt",
+        "youtu.be": "youtube.txt",
+        "facebook.com": "facebook.txt",
+        "fb.watch": "facebook.txt",
+        "instagram.com": "instagram.txt",
+        "tiktok.com": "tiktok.txt",
+        "x.com": "twitter.txt",
+        "twitter.com": "twitter.txt",
+    }
+    for domain, filename in mapping.items():
+        if domain in url:
+            cookie_path = os.path.join(COOKIES_DIR, filename)
+            if os.path.exists(cookie_path):
+                return cookie_path
     return None
 
 
-def remove_file_later(path: str):
-    """Background cleanup of files"""
-    try:
-        if os.path.exists(path):
-            os.remove(path)
-        parent = os.path.dirname(path)
-        if os.path.isdir(parent) and not os.listdir(parent):
-            os.rmdir(parent)
-    except Exception as e:
-        print(f"[CLEANUP ERROR] {e}")
-
-
-# ---------------- MODELS ---------------- #
-class FetchRequest(BaseModel):
-    url: str
-
-
-# ---------------- ROUTES ---------------- #
-@app.get("/")
-async def root():
-    return {"status": "running", "message": "Video Downloader API v3 active"}
-
-
-@app.post("/fetch_info")
-async def fetch_info(req: FetchRequest):
-    url = req.url.strip()
-    if not url:
-        raise HTTPException(status_code=400, detail="Missing URL")
-
-    cookies = get_cookie_file(url)
-    print(f"[INFO] Fetching metadata for: {url}")
-    if cookies:
-        print(f"[INFO] Using cookies: {cookies}")
-
-    try:
-        ydl_opts = {
-            "quiet": True,
-            "no_warnings": True,
-            "skip_download": True,
-            "noplaylist": True,
-            "geo_bypass": True,
-            "cookiefile": cookies,
-            "user_agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/120.0.0.0 Safari/537.36"
-            ),
-        }
-
-        with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-
-        # Save `info` to disk (used and prevents unused-import warnings for json)
-        info_id = info.get("id") or info.get("webpage_url") or "video"
-        safe_id = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in str(info_id))[:200]
-        info_json_path = os.path.join(DOWNLOAD_ROOT, f"{safe_id}_info.json")
-        try:
-            with open(info_json_path, "w", encoding="utf-8") as jf:
-                json.dump(info, jf, indent=2, ensure_ascii=False)
-        except Exception as e:
-            # non-fatal: continue even if saving fails
-            print(f"[WARN] Could not write info json: {e}")
-            info_json_path = None
-
-        # Build full format list
-        formats_out = []
-        for f in info.get("formats", []):
-            fmt = {
-                "format_id": f.get("format_id"),
-                "ext": f.get("ext"),
-                "format_note": f.get("format_note"),
-                "filesize": f.get("filesize") or f.get("filesize_approx"),
-                "vcodec": f.get("vcodec"),
-                "acodec": f.get("acodec"),
-                "width": f.get("width"),
-                "height": f.get("height"),
-                "fps": f.get("fps"),
-                "tbr": f.get("tbr"),
-            }
-            formats_out.append(fmt)
-
-        return {
-            "id": info.get("id"),
-            "title": info.get("title"),
-            "uploader": info.get("uploader"),
-            "thumbnail": info.get("thumbnail"),
-            "duration": info.get("duration"),
-            "webpage_url": info.get("webpage_url"),
-            "formats": formats_out,
-            "info_json": info_json_path,
-        }
-
-    except Exception as e:
-        print(f"[ERROR] fetch_info: {e}")
-        raise HTTPException(status_code=500, detail=f"yt-dlp error: {str(e)}")
-
-
-@app.get("/download")
-async def download(video_url: str = Query(...), format_id: Optional[str] = Query(None),
-                   background_tasks: BackgroundTasks = None):
-    """Download selected format (video/audio)"""
-    print(f"[INFO] Downloading {video_url} | format={format_id}")
-
-    tmpdir = tempfile.mkdtemp(prefix="ydl_", dir=DOWNLOAD_ROOT)
-    outtmpl = os.path.join(tmpdir, "%(title).200s.%(ext)s")
-
-    cookies = get_cookie_file(video_url)
+# --- Core metadata extraction ---
+def fetch_metadata(url: str):
+    logger.info(f"[INFO] Fetching metadata for: {url}")
+    cookie_file = get_cookie_file(url)
 
     ydl_opts = {
         "quiet": True,
+        "skip_download": True,
+        "extract_flat": False,
+        "forcejson": True,
         "no_warnings": True,
-        "outtmpl": outtmpl,
-        "format": format_id or "best",
-        "cookiefile": cookies,
-        "merge_output_format": "mp4",
+        "geo_bypass": True,
+        "noplaylist": True,
+        "source_address": "0.0.0.0",
+        "age_limit": 0,
+        "format_sort": ["res,br"],
     }
+
+    if cookie_file:
+        logger.info(f"[INFO] Using cookies: {cookie_file}")
+        ydl_opts["cookiefile"] = cookie_file
 
     try:
         with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_url, download=True)
+            info = ydl.extract_info(url, download=False)
 
-            # use info to derive a recommended filename (ensures 'info' is used)
-            recommended_name = None
-            try:
-                recommended_name = ydl.prepare_filename(info)
-            except Exception:
-                recommended_name = None
+        if not info:
+            raise Exception("Failed to extract metadata")
 
-            files = glob.glob(os.path.join(tmpdir, "*"))
-            if not files:
-                raise HTTPException(status_code=500, detail="No file downloaded.")
-            files.sort(key=os.path.getsize, reverse=True)
-            file_path = files[0]
+        formats = []
+        for f in info.get("formats", []):
+            if not f.get("url"):
+                continue
 
-        # if we have a recommended_name and it exists, prefer that path
-        if recommended_name and os.path.exists(recommended_name):
-            file_path = recommended_name
+            media_type = "unknown"
+            if f.get("vcodec") != "none" and f.get("acodec") != "none":
+                media_type = "video+audio"
+            elif f.get("vcodec") != "none":
+                media_type = "video"
+            elif f.get("acodec") != "none":
+                media_type = "audio"
 
-        if background_tasks:
-            background_tasks.add_task(remove_file_later, file_path)
+            formats.append({
+                "format_id": f.get("format_id"),
+                "ext": f.get("ext"),
+                "resolution": f.get("format_note") or f.get("resolution"),
+                "filesize": f.get("filesize"),
+                "tbr": f.get("tbr"),
+                "media_type": media_type,
+                "url": f.get("url"),
+            })
 
-        filename = os.path.basename(file_path)
-        # choose a sensible mime type based on extension
-        ext = filename.lower().split(".")[-1]
-        if ext in ("mp3", "m4a", "aac", "opus"):
-            mime_type = "audio/mpeg"
-        elif ext in ("webm", "mkv"):
-            # serve as generic binary if not mp4
-            mime_type = "video/webm" if ext == "webm" else "video/x-matroska"
-        else:
-            mime_type = "video/mp4"
-
-        return FileResponse(file_path, filename=filename, media_type=mime_type)
+        return {
+            "title": info.get("title"),
+            "thumbnail": info.get("thumbnail"),
+            "duration": info.get("duration"),
+            "uploader": info.get("uploader"),
+            "formats": formats,
+        }
 
     except Exception as e:
-        print(f"[ERROR] download: {e}")
-        shutil.rmtree(tmpdir, ignore_errors=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"[ERROR] fetch_metadata: {e}")
+        # Retry without cookies
+        if cookie_file:
+            logger.warning("[WARN] Retrying without cookies...")
+            ydl_opts.pop("cookiefile", None)
+            with YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+            formats = [
+                {
+                    "format_id": f.get("format_id"),
+                    "ext": f.get("ext"),
+                    "resolution": f.get("format_note") or f.get("resolution"),
+                    "url": f.get("url"),
+                }
+                for f in info.get("formats", [])
+                if f.get("url")
+            ]
+            return {
+                "title": info.get("title"),
+                "thumbnail": info.get("thumbnail"),
+                "duration": info.get("duration"),
+                "formats": formats,
+            }
+        raise e
+
+
+# --- Download specific format ---
+def download_media(url: str, format_id: str, is_audio: bool = False) -> str:
+    logger.info(f"[INFO] Downloading: {url} [{format_id}]")
+
+    cookie_file = get_cookie_file(url)
+    output_template = os.path.join(DOWNLOAD_DIR, "%(title)s.%(ext)s")
+
+    ydl_opts = {
+        "format": format_id,
+        "outtmpl": output_template,
+        "quiet": True,
+        "no_warnings": True,
+        "noplaylist": True,
+        "merge_output_format": "mp4" if not is_audio else "mp3",
+        "postprocessors": [],
+    }
+
+    # Enable ffmpeg postprocessing for audio
+    if is_audio:
+        ydl_opts["postprocessors"].append({
+            "key": "FFmpegExtractAudio",
+            "preferredcodec": "mp3",
+            "preferredquality": "192",
+        })
+    else:
+        ydl_opts["postprocessors"].append({
+            "key": "FFmpegVideoConvertor",
+            "preferedformat": "mp4",
+        })
+
+    if cookie_file:
+        ydl_opts["cookiefile"] = cookie_file
+
+    try:
+        with YoutubeDL(ydl_opts) as ydl:
+            result = ydl.extract_info(url, download=True)
+            filename = ydl.prepare_filename(result)
+            # Convert file extension if ffmpeg postprocessed it
+            if is_audio and not filename.endswith(".mp3"):
+                base = os.path.splitext(filename)[0]
+                filename = base + ".mp3"
+            elif not is_audio and not filename.endswith(".mp4"):
+                base = os.path.splitext(filename)[0]
+                filename = base + ".mp4"
+            return filename
+
+    except Exception as e:
+        logger.error(f"[ERROR] download_media: {e}")
+        raise e
+
+
+# --- API Routes ---
+@app.post("/fetch_info")
+async def fetch_info(request: Request):
+    try:
+        data = await request.json()
+        url = data.get("url")
+        if not url:
+            return JSONResponse({"error": "Missing URL"}, status_code=400)
+        result = fetch_metadata(url)
+        return JSONResponse(result)
+    except Exception as e:
+        logger.exception("fetch_info failed")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/download")
+async def download(request: Request):
+    try:
+        data = await request.json()
+        url = data.get("url")
+        format_id = data.get("format_id")
+        is_audio = data.get("is_audio", False)
+
+        if not url or not format_id:
+            return JSONResponse({"error": "Missing parameters"}, status_code=400)
+
+        file_path = download_media(url, format_id, is_audio=is_audio)
+
+        if not os.path.exists(file_path):
+            return JSONResponse({"error": "Download failed"}, status_code=500)
+
+        return FileResponse(
+            path=file_path,
+            media_type="audio/mpeg" if is_audio else "video/mp4",
+            filename=os.path.basename(file_path)
+        )
+    except Exception as e:
+        logger.exception("download failed")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/")
+def root():
+    return {"status": "✅ Video Downloader API is running"}
+
+
+# --- Optional cleanup ---
+@app.on_event("shutdown")
+def cleanup_temp_files():
+    try:
+        for f in os.listdir(DOWNLOAD_DIR):
+            os.remove(os.path.join(DOWNLOAD_DIR, f))
+        logger.info("Cleaned up temporary files.")
+    except Exception as e:
+        logger.warning(f"Cleanup failed: {e}")
