@@ -1,7 +1,5 @@
-fastapi
-uvicorn
 yt-dlp
 ffmpeg-python
-pydantic
-aiofiles
-python-multipart
+imageio[ffmpeg]
+flask
+gunicorn
