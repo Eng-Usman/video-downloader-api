@@ -3,11 +3,11 @@
 # This is a generated file! Do not edit.
 
 .facebook.com	TRUE	/	TRUE	1796235684	datr	8zKKaBOdAjCQfLsGsPK8ooAK
-.facebook.com	TRUE	/	TRUE	1796235756	sb	AjOKaCixdBsqQc4VMYcltlCB
-.facebook.com	TRUE	/	TRUE	1762280560	wd	1358x642
+.facebook.com	TRUE	/	TRUE	1796236913	sb	AjOKaCixdBsqQc4VMYcltlCB
+.facebook.com	TRUE	/	TRUE	1762421669	wd	1358x642
 .facebook.com	TRUE	/	TRUE	1796235704	ps_l	1
 .facebook.com	TRUE	/	TRUE	1796235704	ps_n	1
-.facebook.com	TRUE	/	TRUE	1793211756	c_user	100028308753547
-.facebook.com	TRUE	/	TRUE	1769451756	fr	05xdyO7Q0ztdoqKlP.AWebzdICWauY7HnMouV-cxns0l4UeYjZZkCOeEyP9EH8QHhGK5Y.BpAQj_..AAA.0.0.BpAQnm.AWcCl24EWC9n4m6zQxehDlDbpkk
-.facebook.com	TRUE	/	TRUE	1793211756	xs	48%3AzV2AsnsSQfE9ZA%3A2%3A1761675753%3A-1%3A-1
-.facebook.com	TRUE	/	TRUE	0	presence	C%7B%22t3%22%3A%5B%5D%2C%22utc3%22%3A1761675760994%2C%22v%22%3A1%7D
+.facebook.com	TRUE	/	TRUE	1793352836	c_user	100028308753547
+.facebook.com	TRUE	/	TRUE	1793352836	xs	8%3A4INg6TSzw4-YIA%3A2%3A1761676911%3A-1%3A-1%3A%3AAcxdpbyc_q7NEzT10ULG0ckyK0CGmumWKbIcNRnoPQ
+.facebook.com	TRUE	/	TRUE	0	presence	C%7B%22t3%22%3A%5B%5D%2C%22utc3%22%3A1761816874624%2C%22v%22%3A1%7D
+.facebook.com	TRUE	/	TRUE	1769592885	fr	1nHPUoFj1cSn0Bcnu.AWfBdKp1V-KBg_0ZkBpfL11bbKBsURyT66H2RlBTX2gA0WeqWMY.BpAzEC..AAA.0.0.BpAzEz.AWfQAo04aaVGiNgBIq-caWD5sNs
