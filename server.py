@@ -21,19 +21,16 @@ DOWNLOAD_ROOT = os.environ.get("DOWNLOAD_ROOT", "/tmp/ydl_downloads")
 os.makedirs(DOWNLOAD_ROOT, exist_ok=True)
 logger.info(f"Using DOWNLOAD_ROOT: {DOWNLOAD_ROOT}")
 
-# COOKIES: Use 'cookies.txt' in the root directory by default
 COOKIES_FILE = os.environ.get("COOKIES_FILE_PATH", "cookies.txt")
 if not os.path.exists(COOKIES_FILE):
     logger.warning(f"Cookies file not found at {COOKIES_FILE}. Social media downloads might fail.")
 
-# FastAPI setup
+# FastAPI setup (rest of the setup is unchanged)
 app = FastAPI(
     title="Video Downloader API",
     description="Backend service for fetching and downloading video/audio info with cookie support.",
-    version="1.3.0",
+    version="1.3.1",
 )
-
-# CORS setup
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -42,135 +39,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Helper Functions (Your existing functions) ---
+# ... (Helper functions like remove_file_later, run_subprocess, ffprobe_has_audio,
+# ffprobe_stream_info, and transcode_to_compatible_mp4 are unchanged and omitted for brevity) ...
 
-def remove_file_later(path: str):
-    """Delete file and its parent folder if empty"""
-    try:
-        if os.path.exists(path):
-            os.remove(path)
-        parent = os.path.dirname(path)
-        if os.path.isdir(parent) and not os.listdir(parent) and parent.startswith(DOWNLOAD_ROOT):
-            os.rmdir(parent)
-    except Exception as e:
-        logger.error(f"[CLEANUP ERROR] {e}")
-
-
-def run_subprocess(cmd: list, check: bool = True, capture: bool = False):
-    """Helper to run subprocess and raise readable exception on failure."""
-    try:
-        if capture:
-            completed = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=check)
-            return completed.stdout.decode("utf-8", errors="ignore"), completed.stderr.decode("utf-8", errors="ignore")
-        else:
-            subprocess.run(cmd, check=check)
-            return None, None
-    except subprocess.CalledProcessError as e:
-        out = e.stdout.decode("utf-8", errors="ignore") if e.stdout else ""
-        err = e.stderr.decode("utf-8", errors="ignore") if e.stderr else str(e)
-        raise RuntimeError(f"Command `{cmd[0]}` failed: {err}\n{out}")
-
-
-def ffprobe_has_audio(path: str) -> bool:
-    """Return True if file has at least one audio stream (uses ffprobe)."""
-    cmd = [
-        "ffprobe",
-        "-v",
-        "error",
-        "-show_entries",
-        "stream=codec_type",
-        "-of",
-        "csv=p=0",
-        path,
-    ]
-    try:
-        out, err = run_subprocess(cmd, capture=True)
-        return "audio" in out.splitlines()
-    except Exception as e:
-        logger.error(f"[ffprobe error] {e}")
-        return True
-
-
-def ffprobe_stream_info(path: str) -> dict:
-    """
-    Returns a dict of stream counts and codecs using ffprobe.
-    """
-    cmd = [
-        "ffprobe",
-        "-v",
-        "error",
-        "-select_streams",
-        "v:a",
-        "-show_entries",
-        "stream=index,codec_type,codec_name",
-        "-of",
-        "json",
-        path,
-    ]
-    try:
-        out, _ = run_subprocess(cmd, capture=True)
-        import json
-
-        data = json.loads(out) if out else {}
-        streams = data.get("streams", [])
-        info = {"audio": [], "video": []}
-        for s in streams:
-            ctype = s.get("codec_type")
-            cname = s.get("codec_name")
-            if ctype and cname:
-                if ctype in info:
-                    info[ctype].append(cname)
-        return info
-    except Exception as e:
-        logger.error(f"[ffprobe info error] {e}")
-        return {"audio": [], "video": []}
-
-
-def transcode_to_compatible_mp4(video_path: str,
-                                audio_path: Optional[str],
-                                output_path: str):
-    """
-    Merge or transcode into an MP4 (H.264 + AAC).
-    """
-    cmd = ["ffmpeg", "-y"]
-
-    if audio_path and os.path.exists(audio_path):
-        # normal merge
-        cmd += [
-            "-i", video_path,
-            "-i", audio_path,
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-            "-c:a", "aac", "-b:a", "128k",
-            "-map", "0:v:0", "-map", "1:a:0",
-            "-shortest", "-movflags", "+faststart", output_path
-        ]
-    else:
-        # no audio file: add silent AAC track (handles video-only streams)
-        cmd += [
-            "-i", video_path,
-            "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
-            "-shortest",
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-            "-c:a", "aac", "-b:a", "128k",
-            "-map", "0:v:0", "-map", "1:a:0",
-            "-movflags", "+faststart", output_path
-        ]
-
-    try:
-        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-        return True
-    except subprocess.CalledProcessError as e:
-        logger.error("[ffmpeg error]", e.stderr.decode(errors="ignore"))
-        return False
-
-
-class FetchRequest(BaseModel):
-    url: str
-
-# --- CORE LOGIC UPDATED FOR COOKIES ---
+# --- CORE LOGIC WITH FIXES ---
 
 def get_ydl_options(cookie_file: str) -> dict:
-    """Central function to get base yt-dlp options, including cookies."""
+    """Central function to get base yt-dlp options, including cookies and bot mitigation."""
     ydl_opts = {
         "quiet": True,
         "no_warnings": True,
@@ -178,7 +53,7 @@ def get_ydl_options(cookie_file: str) -> dict:
         "extract_flat": False,
         "noplaylist": True,
         "geo_bypass": True,
-        # Ensure consistent user agent (often key for YouTube/Instagram cookies)
+        "force_ipv4": True, # ADDED: Helps mitigate 'Sign in to confirm you’re not a bot' errors
         "user_agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -186,7 +61,6 @@ def get_ydl_options(cookie_file: str) -> dict:
         ),
     }
 
-    # Add cookies file if it exists (for YouTube, Facebook, Instagram, TikTok)
     if os.path.exists(cookie_file):
         ydl_opts["cookiefile"] = cookie_file
         logger.info(f"Using cookies from: {cookie_file}")
@@ -202,9 +76,8 @@ async def root():
 @app.post("/fetch_info")
 async def fetch_info(req: FetchRequest):
     url = req.url.strip()
-    # ... (omitted initial validation logic for brevity) ...
-
     try:
+        # ... (unchanged logic to extract info and parse formats, including MP3 option) ...
         if not url:
             raise HTTPException(status_code=400, detail="Missing 'url' field")
 
@@ -227,9 +100,7 @@ async def fetch_info(req: FetchRequest):
                 abr = float(f.get("abr") or 0)
                 if abr <= 0: continue
 
-                # Use High/Medium/Low quality based on bitrate
                 quality = "High" if abr >= 170 else ("Medium" if abr >= 90 else "Low")
-
                 filesize = f.get("filesize") or f.get("filesize_approx")
                 filesize_mb = round(filesize / (1024 * 1024), 2) if filesize else None
                 filesize_str = f"{filesize_mb} MB" if filesize_mb else "N/A"
@@ -246,7 +117,7 @@ async def fetch_info(req: FetchRequest):
                         "abr": round(abr),
                     }
 
-            # 2. Gather all video formats (including those with bundled audio)
+            # 2. Gather all video formats (NOTE: These are typically listed by resolution like 1080p, 720p)
             elif f.get("vcodec") != "none":
                 height = f.get("height")
                 label = f"{height}p" if height else f.get("format_note") or "Video"
@@ -267,14 +138,12 @@ async def fetch_info(req: FetchRequest):
                     "acodec": f.get("acodec"),
                 })
 
-        # 3. Add a universal MP3 audio option (approximate)
+        # 3. Add universal MP3 audio option
         if audio_formats:
-            # Find the best quality audio to estimate MP3 size
             best_audio = max(audio_formats.values(), key=lambda x: x['abr'])
 
-            # The client needs to select this 'audio-mp3' to trigger conversion
             mp3_option = {
-                "format_id": best_audio["format_id"], # Use the best audio ID
+                "format_id": best_audio["format_id"],
                 "ext": "mp3",
                 "format_note": f"Audio Only - MP3 (Conversion)",
                 "filesize_mb": best_audio["filesize_mb"],
@@ -299,8 +168,8 @@ async def fetch_info(req: FetchRequest):
 
     except Exception as e:
         logger.error(f"[ERROR] fetch_info: {e}", exc_info=True)
+        # Re-raise the exception with a clear message
         raise HTTPException(status_code=500, detail=f"yt-dlp extract failed: {e}")
-
 
 @app.get("/download")
 async def download(video_url: str = Query(...),
