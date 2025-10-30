@@ -1,8 +1,23 @@
+# render.yaml
 services:
   - type: web
     name: video-downloader-api
     env: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: |
+      # Install system packages (ffmpeg is crucial)
+      apt-get update && apt-get install -y ffmpeg
+      # Install python packages
+      pip install -r requirements.txt
+      # (Optional) Copy your cookies file into the build environment
+      # If you are using a Private Repo, you can commit it.
+      # If using Render Disk/Environment Variable, you will handle it differently.
+      # For simplicity, assuming a 'cookies.txt' file is committed.
+      cp /etc/default/my-cookies.txt cookies.txt # ADJUST THIS PATH
     startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
-    plan: starter
-    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: DOWNLOAD_ROOT
+        value: /tmp/ydl_downloads # Ensure downloads go to ephemeral storage
+    # - key: COOKIES_FILE_PATH # Use this if your cookies file is stored elsewhere
+    #   value: /path/to/my-cookies.txt

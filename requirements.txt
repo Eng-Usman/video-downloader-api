@@ -1,9 +1,7 @@
 fastapi
 uvicorn
-yt-dlp
-ffmpeg-python
-imageio[ffmpeg]
-pydantic
 python-multipart
-aiofiles
-python-dotenv
+pydantic
+yt-dlp
+# You may need to add 'python-json' or similar if you run into issues,
+# but usually standard library `json` is sufficient.
