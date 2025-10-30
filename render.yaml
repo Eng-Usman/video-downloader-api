@@ -18,6 +18,6 @@ services:
       - key: PORT
         value: 10000
       - key: DOWNLOAD_ROOT
-        value: /tmp/ydl_downloads # Ensure downloads go to ephemeral storage
+        value: /tmp/ydl_downloads # Ensure ydl_downloads go to ephemeral storage
     # - key: COOKIES_FILE_PATH # Use this if your cookies file is stored elsewhere
     #   value: /path/to/my-cookies.txt
